@@ -36,13 +36,20 @@ check_token <- function() {
 
 canvas_url <- function() paste0(Sys.getenv("CANVAS_DOMAIN"), "/api/v1/")
 
-canvas_query <- function(urlx, args, type = "GET") {
+canvas_query <- function(urlx, args = NULL, type = "GET") {
   fun <- getFromNamespace(type, "httr")
   args <- sc(args)
-  resp <- fun(urlx,
-              httr::user_agent("rcanvas - https://github.com/daranzolin/rcanvas"),
-              httr::add_headers(Authorization = paste("Bearer", check_token())),
-              query = args)
+  if (type %in% c("POST", "PUT")) {
+    resp <- fun(urlx,
+                httr::user_agent("rcanvas - https://github.com/daranzolin/rcanvas"),
+                httr::add_headers(Authorization = paste("Bearer", check_token())),
+                body = args)
+  } else {
+    resp <- fun(urlx,
+                httr::user_agent("rcanvas - https://github.com/daranzolin/rcanvas"),
+                httr::add_headers(Authorization = paste("Bearer", check_token())),
+                query = args)
+  }
   httr::stop_for_status(resp)
   return(resp)
 }
@@ -63,4 +70,32 @@ sc <- function(x) {
 convert_dates <- function(base_date = Sys.Date(), days) {
   new_date <- base_date + lubridate::ddays(days)
   format(new_date, "%Y-%m-%d")
+}
+
+#' Exectute a query on the remove API
+#'
+#' This function allows you to call methods which are not specifically exposed by this API yet
+#'
+#' @param endpoint the API endpoint to call, with or without the canvas domain. You can give a vector of parts which will be joined with slashes.
+#' @param args a list of arguments for the call
+#' @param method GET or POST
+#' @param process_response if TRUE (default for GET requests), paginate results and return a data frame
+#' @return A data.frame if process_response is TRUE, otherwise an httr response
+#'
+#' @export
+#' @examples
+#' # A get request to the announcements endpoint (replicating get_announcements):
+#' do_query("announcements", list(`context_codes[]`="course_1234"))
+#'
+#' # A post request to the group membership endpoint (replicating add_group_user):
+#' do_query(c("groups", 123, "memberships"), list(user_id=1), method = "POST")
+do_query <- function(endpoint, args=NULL, method="GET", process_response=(method == "GET")) {
+  endpoint = paste(endpoint, collapse="/")
+  if (!grepl("^https?://", endpoint)) endpoint = paste0(canvas_url(), endpoint)
+  if (process_response) {
+    if (method != "GET") stop("Process_response can only be used on GET requests")
+    process_response(endpoint, args)
+  } else {
+    invisible(canvas_query(endpoint, args, method))
+  }
 }
